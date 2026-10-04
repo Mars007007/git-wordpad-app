@@ -15,6 +15,7 @@ let candidate = null;
 let busy = false;
 let checking = false;
 let selection = null;
+let selectingText = false;
 let lastCheck = null;
 let persistence = Promise.resolve();
 let writable = false;
@@ -118,8 +119,11 @@ function refresh() {
   $('word-count').textContent = `${words} ${words===1?'Wort':'Wörter'}`;
   $('save-button').disabled = busy || !writable;
   $('save-button').querySelector('span').textContent = busy ? '…' : 'Save';
-  const editable = String(writable && !busy);
+  const editable = String(writable && !busy && !selectingText);
   if (editor.contentEditable !== editable) editor.contentEditable = editable;
+  editor.dataset.selecting = String(selectingText);
+  $('copy-button').setAttribute('aria-pressed', String(selectingText));
+  $('copy-button').title = selectingText ? 'Auswahl kopieren · ohne Auswahl: Markieren beenden' : 'Auswahl kopieren · ohne Auswahl: Text markieren';
   for (const el of document.querySelectorAll('.toolbar button,.toolbar select,.toolbar input,#connection-button')) el.disabled = busy || !writable;
   $('info-button').disabled = busy;
 }
@@ -158,8 +162,15 @@ function restoreSelection() {
   if (selection && editor.contains(selection.commonAncestorContainer)) selected.addRange(selection);
   else { const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); selected.addRange(range); }
 }
+function setSelectingText(active) {
+  rememberSelection();
+  selectingText = active;
+  refresh();
+  if (active) editor.blur(); // Hide the keyboard; use native selection on ordinary text.
+}
 function command(name, value = null) {
   if (busy || !writable) return;
+  if (selectingText) setSelectingText(false);
   restoreSelection();
   document.execCommand(name, false, value);
   rememberSelection();
@@ -169,6 +180,7 @@ function newDraft(path, title = titleFromPath(path)) {
   return {key:storage.draftKey(config,path),scope:storage.scopeKey(config),path,title,html:'',baseHtml:'',baseSha:null,head:null,updatedAt:Date.now(),remoteDeleted:false};
 }
 async function displayDraft(draft) {
+  selectingText = false;
   current = draft;
   candidate = null;
   selection = null;
@@ -205,13 +217,13 @@ async function adoptRemote(remote, reason) {
   refresh();
 }
 async function checkRemote() {
-  if (!github || !current || busy || checking || composing || !navigator.onLine) { refresh(); return; }
+  if (!github || !current || busy || checking || composing || selectingText || !navigator.onLine) { refresh(); return; }
   checking = true;
   const epoch = uiEpoch;
   const client = github;
   try {
     const remote = await client.snapshot(current.path);
-    if (busy || epoch !== uiEpoch || client !== github) return;
+    if (busy || selectingText || epoch !== uiEpoch || client !== github) return;
     lastCheck = Date.now();
     const empty = isEmptyHTML(current.html);
     // A blank restored draft can differ even when the last known remote SHA matches.
@@ -234,6 +246,7 @@ async function checkRemote() {
 }
 async function save() {
   if (busy || !writable) return;
+  if (selectingText) setSelectingText(false);
   busy = true; refresh(); message('');
   try {
     await persist();
@@ -337,6 +350,7 @@ $('connection-button').onclick = async () => {
 };
 $('info-button').onclick = () => showInfo().catch(e => message(errorMessage(e),true));
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && selectingText) { event.preventDefault(); setSelectingText(false); message('Markieren beendet.'); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!document.querySelector('dialog[open]')) save().catch(e => message(errorMessage(e),true)); }
 });
 $('connection-dialog').addEventListener('close', () => { $('token').value = ''; });
@@ -420,6 +434,7 @@ $('compare-button').onclick = async () => {
 
 async function insertImages(files) {
   if (busy || !writable) return;
+  if (selectingText) setSelectingText(false);
   const epoch = uiEpoch;
   rememberSelection();
   busy = true; refresh();
@@ -458,18 +473,40 @@ editor.addEventListener('drop', event => {
   if (files.length) insertImages(files).catch(e => message(errorMessage(e),true));
   else message('Text bitte mit Einfügen übernehmen. Bilder können hier abgelegt werden.');
 });
-$('copy-button').onpointerdown = event => event.preventDefault();
+$('copy-button').onpointerdown = event => { rememberSelection(); event.preventDefault(); };
 $('copy-button').onclick = async () => {
   restoreSelection();
   try {
     const selected = window.getSelection();
-    if (!selected.toString()) { message('Zum Kopieren zuerst Text markieren.'); return; }
+    if (!selected.toString()) {
+      if (selectingText) { setSelectingText(false); message('Markieren beendet.'); }
+      else if (editor.innerText.trim()) {
+        setSelectingText(true);
+        message('Markieren: Wort lange antippen, Griffe ziehen, dann Copy. Ohne Auswahl beendet Copy den Markiermodus.');
+      } else message('Noch kein Text zum Markieren vorhanden.');
+      return;
+    }
+    const text = selected.toString();
     const container = document.createElement('div'); container.append(selected.getRangeAt(0).cloneContents());
-    if (navigator.clipboard?.write && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([selected.toString()],{type:'text/plain'}),'text/html':new Blob([sanitizeHTML(container.innerHTML)],{type:'text/html'})})]);
-    else if (!document.execCommand('copy')) throw new Error('Bitte Strg+C oder das Kopieren-Menü deines Geräts verwenden.');
+    let copied = false;
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([sanitizeHTML(container.innerHTML)],{type:'text/html'})})]);
+        copied = true;
+      } catch { /* Some mobile browsers allow plain text but reject formatted clipboard data. */ }
+    }
+    if (!copied && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); copied = true; } catch { /* Try the native selection below. */ }
+    }
+    if (!copied && (window.getSelection().toString() !== text || !document.execCommand('copy'))) throw new Error('Kopieren nicht verfügbar.');
+    if (selectingText) setSelectingText(false);
     message('Auswahl kopiert.');
-  } catch { message('Bitte Strg+C oder das Kopieren-Menü deines Geräts verwenden.'); }
+  } catch { message('Bitte die markierte Auswahl lange antippen und im Android-Menü Kopieren wählen; am PC Strg+C.'); }
 };
+document.addEventListener('copy', () => {
+  // Let the browser finish its native copy before re-enabling editing.
+  if (selectingText && editor.contains(window.getSelection().anchorNode)) setTimeout(() => { if (selectingText) { setSelectingText(false); message('Markieren beendet.'); } }, 0);
+});
 $('paste-button').onpointerdown = event => event.preventDefault();
 $('paste-button').onclick = async () => {
   try {
