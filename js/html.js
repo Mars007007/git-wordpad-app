@@ -51,6 +51,15 @@ export function bodyHTML(html) {
   return sanitizeHTML(html);
 }
 
+export function isEmptyHTML(html) {
+  const template = document.createElement('template');
+  template.innerHTML = sanitizeHTML(html);
+  // Editors leave empty paragraphs, <br>, NBSP and invisible caret characters.
+  // An image is content even when the document contains no text.
+  return !template.content.querySelector('img') &&
+    !template.content.textContent.replace(/[\s\u200B-\u200D\u2060\uFEFF]/gu, '');
+}
+
 export function assetPaths(body) {
   const template = document.createElement('template');
   template.innerHTML = sanitizeHTML(body);

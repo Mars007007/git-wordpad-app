@@ -1,4 +1,4 @@
-const CACHE = 'git-wordpad-shell-v4';
+const CACHE = 'git-wordpad-shell-v5';
 const FILES = ['./','./index.html','./styles.css','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.png','./icons/icon-512.png','./js/app.js','./js/auth.js','./js/config.js','./js/html.js','./js/storage.js','./js/github.js','./js/images.js'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));

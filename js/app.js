@@ -1,6 +1,6 @@
 import * as storage from './storage.js';
 import { GitHub, ConflictError, validDocumentPath } from './github.js';
-import { sanitizeHTML, documentHTML, bodyHTML, mountHTML, assetPaths, escapeHTML, titleFromPath } from './html.js';
+import { sanitizeHTML, documentHTML, bodyHTML, isEmptyHTML, mountHTML, assetPaths, escapeHTML, titleFromPath } from './html.js';
 import { importImage, hydrateImages, releaseImageURLs } from './images.js';
 import { REPOSITORY } from './config.js';
 import { rememberToken, rememberedToken, forgetToken } from './auth.js';
@@ -198,6 +198,7 @@ async function adoptRemote(remote, reason) {
   current.remoteDeleted = remote.sha === null;
   candidate = null;
   selection = null;
+  $('conflict-dialog').close();
   mountHTML(editor, current.html);
   await persist();
   await hydrateImages(editor, github, remote.head).catch(e => message(`Text aktualisiert. ${errorMessage(e)}`,true));
@@ -212,9 +213,11 @@ async function checkRemote() {
     const remote = await client.snapshot(current.path);
     if (busy || epoch !== uiEpoch || client !== github) return;
     lastCheck = Date.now();
-    if (remote.sha === current.baseSha) { candidate = null; refresh(); return; }
+    const empty = isEmptyHTML(current.html);
+    // A blank restored draft can differ even when the last known remote SHA matches.
+    if (remote.sha === current.baseSha && (composing || !empty || current.html === bodyHTML(remote.html))) { candidate = null; refresh(); return; }
     // Re-evaluate dirtiness AFTER awaiting the network: typing during polling must survive.
-    if ((dirty() && (current.baseSha !== null || current.html !== '')) || composing) await setConflict(remote);
+    if ((dirty() && !empty) || composing) await setConflict(remote);
     else {
       candidate = remote; refresh();
       busy = true; refresh();
@@ -238,6 +241,11 @@ async function save() {
     if (!navigator.onLine) { message('Offline: Dein Entwurf ist lokal gesichert. Sobald du online bist, erneut Save wählen.'); return; }
     const remote = await github.snapshot(current.path);
     lastCheck = Date.now();
+    if (isEmptyHTML(current.html)) {
+      await adoptRemote(remote,'Leeren lokalen Stand ignoriert');
+      message(remote.sha ? 'Die GitHub-Version wurde geladen. Der leere lokale Stand wurde ignoriert.' : 'Leere Dokumente werden nicht auf GitHub gespeichert.');
+      return;
+    }
     if (remote.sha !== current.baseSha) {
       if (!dirty()) { await adoptRemote(remote,'Vor Save aktualisiert'); message('Die neuere GitHub-Version wurde geladen.'); return; }
       await setConflict(remote); $('conflict-dialog').open || $('conflict-dialog').showModal(); return;
