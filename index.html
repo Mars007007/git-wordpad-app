@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#f5f4f0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Git WordPad</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main>
+    <div class="toolbar" role="toolbar" aria-label="Text formatieren">
+      <div class="tool-group"><button data-command="undo" title="Rückgängig (Strg+Z)" aria-label="Undo">↶</button><button data-command="redo" title="Wiederholen (Strg+Y)" aria-label="Redo">↷</button></div>
+      <div class="tool-group"><label class="size-label"><span class="sr-only">Schriftgröße</span><select id="font-size" aria-label="Schriftgröße"><option value="12">12</option><option value="14">14</option><option value="16" selected>16</option><option value="18">18</option><option value="24">24</option><option value="32">32</option><option value="48">48</option></select></label><label class="color-label" title="Textfarbe"><span aria-hidden="true">A</span><input id="text-color" type="color" value="#293531" aria-label="Textfarbe"></label></div>
+      <div class="tool-group"><button data-command="bold" title="Fett (Strg+B)" aria-label="Fett"><strong>B</strong></button><button data-command="italic" title="Kursiv (Strg+I)" aria-label="Kursiv"><em>I</em></button><button data-command="underline" title="Unterstrichen (Strg+U)" aria-label="Unterstrichen"><u>U</u></button></div>
+      <div class="tool-group"><button data-command="insertOrderedList" title="Nummerierte Liste" aria-label="Nummerierte Liste">1≡</button><button data-command="insertUnorderedList" title="Stichpunkte" aria-label="Stichpunkte">•≡</button></div>
+      <div class="tool-group"><button id="image-button" title="Bild einfügen" aria-label="Bild einfügen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 18 6-6 4 4 3-3 4 4"/></svg></button><button id="copy-button" title="Auswahl kopieren" aria-label="Copy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></svg></button><button id="paste-button" title="Einfügen" aria-label="Paste"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5H5v16h14V5h-3"/><rect x="8" y="2" width="8" height="5" rx="1"/></svg></button></div>
+      <button id="save-button" class="primary save-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM8 3v7h8V3M8 21v-7h8v7"/></svg><span>Save</span></button>
+    </div>
+    <article class="paper"><div id="editor" class="document-body" contenteditable="true" role="textbox" aria-label="Dokumentinhalt" aria-multiline="true" spellcheck="true" data-placeholder="Schreiben …"></div></article>
+    <footer class="document-footer">
+      <span id="status" class="status" role="status" data-state="dirty"><span></span><span id="status-text">ungespeichert</span></span>
+      <span id="connectivity">lokal</span>
+      <span id="notice" class="notice" role="status" hidden></span>
+      <button id="info-button" aria-label="Informationen und Einrichtung" title="Informationen und Einrichtung">i</button>
+    </footer>
+  </main>
+  <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  <dialog id="connection-dialog" aria-labelledby="connection-title">
+    <form id="connection-form">
+      <div class="dialog-heading"><h2 id="connection-title">Einmalige Einrichtung</h2><button type="button" data-close="connection-dialog" aria-label="Schließen">×</button></div>
+      <p>Fest verbunden mit dem privaten Repository <strong>Mars007007/git-wordpad</strong>. Lokal unter Windows wird der vorhandene Git-Zugang automatisch verwendet.</p>
+      <details id="repository-settings"><summary>Festes Repository und Datei</summary>
+      <label>GitHub-Benutzer<input id="owner" value="Mars007007" readonly></label>
+      <label>Privates Repository<input id="repo" value="git-wordpad" readonly></label>
+      <label>Branch<input id="branch" value="main" readonly></label>
+      <label>Feste HTML-Datei<input id="document-path" value="documents/notizen.html" readonly></label>
+      </details>
+      <label>Fine-grained Personal Access Token<input id="token" type="password" required autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <label class="remember-label"><input id="remember-login" type="checkbox" checked>Auf diesem Gerät angemeldet bleiben</label>
+      <p class="hint">Einmal verbinden, danach automatisch weiterarbeiten – auch auf Android. Nur auf deinem eigenen Gerät verwenden. Der Zugang wird lokal verschlüsselt gespeichert und bleibt für diese App zugänglich.</p>
+      <p class="hint">Nur „git-wordpad“ freigeben, „Contents: Read and write“. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Token bei GitHub erstellen ↗</a></p>
+      <p class="hint">Lokale Entwürfe sind auf diesem Gerät gespeichert, nicht zusätzlich verschlüsselt. Nutze eine vertrauenswürdige Installation.</p>
+      <p id="connection-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button id="disconnect-button" type="button">Abmelden und Zugang vergessen</button><button class="primary" type="submit">Verbinden</button></div>
+    </form>
+  </dialog>
+  <dialog id="info-dialog" aria-labelledby="info-title">
+    <div class="dialog-heading"><h2 id="info-title">Informationen</h2><button data-close="info-dialog" aria-label="Schließen">×</button></div>
+    <p id="document-title"></p><p id="document-location"></p>
+    <p><span id="draft-status">Entwurf wird lokal gesichert</span><br><span id="sync-status">Offline bereit</span><br><span id="word-count">0 Wörter</span></p>
+    <p id="notice-detail" role="status" hidden></p>
+    <div class="dialog-actions"><button id="install" hidden>Installieren</button><button id="connection-button"><span id="connection-label">GitHub verbinden</span></button></div>
+    <details><summary>Gesicherte Zwischenstände</summary><p class="hint">Die letzten zehn Versionen vor Speichern, Neuladen oder Wiederherstellen. Wiederherstellen erzeugt zunächst nur einen lokalen Entwurf.</p><div id="recovery-list" class="document-list"></div></details>
+  </dialog>
+  <dialog id="conflict-dialog" class="conflict-dialog" aria-labelledby="conflict-title">
+    <div class="dialog-heading"><h2 id="conflict-title">Zwei Versionen, ein Dokument</h2><button data-close="conflict-dialog" aria-label="Später entscheiden">×</button></div>
+    <p id="conflict-description">Auf GitHub gibt es eine andere Version. Deine lokalen Änderungen sind gesichert.</p>
+    <div id="comparison" class="comparison" hidden><section><h3>Deine lokale Version</h3><div id="compare-local" class="document-body"></div></section><section><h3>Version auf GitHub</h3><div id="compare-remote" class="document-body"></div></section></div>
+    <p class="hint">„Neu laden“ übernimmt GitHub und sichert deinen Entwurf als Zwischenstand. „Lokale Version behalten“ bereitet deinen Stand für den nächsten Save vor.</p>
+    <div class="dialog-actions"><button id="reload-button">Neu laden</button><button id="compare-button">Vergleichen</button><button id="keep-button" class="primary">Lokale Version behalten</button></div>
+  </dialog>
+</body>
+</html>
