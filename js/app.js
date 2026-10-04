@@ -1,6 +1,6 @@
 import * as storage from './storage.js';
 import { GitHub, ConflictError, validDocumentPath } from './github.js';
-import { sanitizeHTML, documentHTML, bodyHTML, isEmptyHTML, mountHTML, assetPaths, escapeHTML, titleFromPath } from './html.js';
+import { sanitizeHTML, documentHTML, bodyHTML, isEmptyHTML, plainTextListHTML, clipboardListText, mountHTML, assetPaths, escapeHTML, titleFromPath } from './html.js';
 import { importImage, hydrateImages, releaseImageURLs } from './images.js';
 import { REPOSITORY } from './config.js';
 import { rememberToken, rememberedToken, forgetToken } from './auth.js';
@@ -176,6 +176,21 @@ function command(name, value = null) {
   rememberSelection();
   changed();
 }
+function inList(node) {
+  const element = node?.nodeType === 1 ? node : node?.parentElement;
+  const item = element?.closest('li,ul,ol');
+  return !!item && editor.contains(item);
+}
+function changeListLevel(name) {
+  if (busy || !writable) return;
+  restoreSelection();
+  const selected = window.getSelection();
+  if (!inList(selected.anchorNode) || !inList(selected.focusNode)) {
+    message('Zum Einrücken zuerst einen Listenpunkt anklicken oder mehrere Listenpunkte markieren.');
+    return;
+  }
+  command(name);
+}
 function newDraft(path, title = titleFromPath(path)) {
   return {key:storage.draftKey(config,path),scope:storage.scopeKey(config),path,title,html:'',baseHtml:'',baseSha:null,head:null,updatedAt:Date.now(),remoteDeleted:false};
 }
@@ -331,6 +346,10 @@ for (const button of document.querySelectorAll('[data-command]')) {
   button.addEventListener('pointerdown', event => event.preventDefault());
   button.onclick = () => command(button.dataset.command);
 }
+for (const button of document.querySelectorAll('[data-list-command]')) {
+  button.addEventListener('pointerdown', event => { rememberSelection(); event.preventDefault(); });
+  button.onclick = () => changeListLevel(button.dataset.listCommand);
+}
 for (const button of document.querySelectorAll('[data-close]')) button.onclick = () => $(button.dataset.close).close();
 editor.addEventListener('input', changed);
 editor.addEventListener('compositionstart', () => { composing = true; });
@@ -350,6 +369,9 @@ $('connection-button').onclick = async () => {
 };
 $('info-button').onclick = () => showInfo().catch(e => message(errorMessage(e),true));
 document.addEventListener('keydown', event => {
+  if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey && editor.contains(event.target) && inList(window.getSelection().anchorNode)) {
+    event.preventDefault(); changeListLevel(event.shiftKey ? 'outdent' : 'indent');
+  }
   if (event.key === 'Escape' && selectingText) { event.preventDefault(); setSelectingText(false); message('Markieren beendet.'); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!document.querySelector('dialog[open]')) save().catch(e => message(errorMessage(e),true)); }
 });
@@ -452,6 +474,7 @@ $('image-button').onpointerdown = e => e.preventDefault();
 $('image-button').onclick = () => { rememberSelection(); $('image-input').click(); };
 $('image-input').onchange = async () => { try { await insertImages([...$('image-input').files]); } catch (error) { message(errorMessage(error),true); } finally { $('image-input').value=''; } };
 async function insertClipboard(html, text) {
+  if (!html) html = plainTextListHTML(text);
   if (html) {
     const safe = sanitizeHTML(html);
     const template = document.createElement('template'); template.innerHTML = safe;
@@ -488,15 +511,23 @@ $('copy-button').onclick = async () => {
     }
     const text = selected.toString();
     const container = document.createElement('div'); container.append(selected.getRangeAt(0).cloneContents());
+    const ancestor = selected.getRangeAt(0).commonAncestorContainer;
+    if (['UL','OL'].includes(ancestor.nodeName)) {
+      // cloneContents returns bare <li> nodes when a selection spans siblings.
+      const list = document.createElement(ancestor.nodeName);
+      list.append(...container.childNodes); container.append(list);
+    }
+    const html = sanitizeHTML(container.innerHTML);
+    const plain = clipboardListText(html,text);
     let copied = false;
     if (navigator.clipboard?.write && window.ClipboardItem) {
       try {
-        await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([sanitizeHTML(container.innerHTML)],{type:'text/html'})})]);
+        await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([plain],{type:'text/plain'}),'text/html':new Blob([html],{type:'text/html'})})]);
         copied = true;
       } catch { /* Some mobile browsers allow plain text but reject formatted clipboard data. */ }
     }
     if (!copied && navigator.clipboard?.writeText) {
-      try { await navigator.clipboard.writeText(text); copied = true; } catch { /* Try the native selection below. */ }
+      try { await navigator.clipboard.writeText(plain); copied = true; } catch { /* Try the native selection below. */ }
     }
     if (!copied && (window.getSelection().toString() !== text || !document.execCommand('copy'))) throw new Error('Kopieren nicht verfügbar.');
     if (selectingText) setSelectingText(false);

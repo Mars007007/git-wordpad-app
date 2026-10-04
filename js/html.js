@@ -39,7 +39,57 @@ export function sanitizeHTML(html) {
     parent.append(el);
   }
   for (const node of source.content.childNodes) walk(node, result);
+  // Native indent may emit <ul><li>Parent</li><ul>...</ul></ul>.
+  // Store proper list ownership so nesting survives reload and clipboard round trips.
+  for (const list of result.querySelectorAll('ul > ul,ul > ol,ol > ul,ol > ol')) {
+    let owner = list.previousElementSibling;
+    if (owner?.tagName !== 'LI') {
+      owner = document.createElement('li'); list.before(owner);
+    }
+    owner.append(list);
+  }
   return result.innerHTML.trim();
+}
+
+// Recognize a complete pasted outline, including Android's plain-text clipboard.
+// Other text is left untouched; this is not a Markdown document editor.
+export function plainTextListHTML(text) {
+  const lines = String(text).replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
+  const items = lines.map(line => line.match(/^([ \t]*)([-+*•◦▪]|\d+[.)])[ \t]+(.*)$/u));
+  if (!items.length || items.some(item => !item)) return '';
+  const root = document.createElement('div');
+  const stack = [];
+  for (const [, space, marker, content] of items) {
+    const indent = space.replace(/\t/g, '    ').length;
+    const type = /^\d/.test(marker) ? 'ol' : 'ul';
+    while (stack.length && indent < stack.at(-1).indent) stack.pop();
+    if (!stack.length || indent > stack.at(-1).indent || type !== stack.at(-1).type) {
+      if (stack.length && indent === stack.at(-1).indent) stack.pop();
+      const parent = stack.length ? stack.at(-1).last : root;
+      const list = document.createElement(type); parent.append(list);
+      stack.push({indent, type, list, last:null});
+    }
+    const item = document.createElement('li'); item.textContent = content;
+    stack.at(-1).list.append(item); stack.at(-1).last = item;
+  }
+  return root.innerHTML;
+}
+
+export function clipboardListText(html, fallback) {
+  const template = document.createElement('template'); template.innerHTML = html;
+  // Complete list fragments can round-trip even through a plain-text-only clipboard.
+  const roots = [...template.content.childNodes].filter(node => node.nodeType !== 3 || node.textContent.trim());
+  if (!roots.length || roots.some(node => !['UL','OL'].includes(node.nodeName))) return fallback;
+  function lines(list, depth) {
+    return [...list.children].flatMap((item, index) => {
+      const label = item.cloneNode(true);
+      for (const nested of label.querySelectorAll('ul,ol')) nested.remove();
+      const prefix = list.tagName === 'OL' ? `${index+1}.` : '-';
+      return [`${'  '.repeat(depth)}${prefix} ${label.textContent.trim().replace(/\s+/g,' ')}`,
+        ...[...item.querySelectorAll('ul,ol')].filter(nested => nested.parentElement.closest('ul,ol') === list).flatMap(nested => lines(nested,depth+1))];
+    });
+  }
+  return roots.flatMap(list => lines(list,0)).join('\n');
 }
 
 export function documentHTML(title, body) {

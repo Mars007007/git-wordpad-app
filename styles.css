@@ -26,3 +26,4 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:28px;max-width:52
 @media(max-width:900px){.toolbar{flex-wrap:wrap;row-gap:5px}}
 @media(max-width:760px){.toolbar{flex-wrap:wrap;row-gap:5px;padding:6px}.tool-group{padding:0 5px}.toolbar button{width:44px;min-height:44px}.toolbar .save-button{min-height:44px;padding:0 14px}.toolbar select{height:44px}.color-label{height:44px}#editor{padding:10px 12px}.document-footer{height:36px;gap:8px}#info-button{width:40px;min-height:36px}.comparison{grid-template-columns:1fr}dialog{padding:21px}.dialog-actions button{flex:1}.dialog-heading h2{font-size:23px}}
 @media(max-width:420px){.tool-group{padding:0 3px}}
+@media(max-width:760px){.toolbar{column-gap:2px}.toolbar .tool-group{display:contents}}
